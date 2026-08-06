@@ -1,0 +1,32 @@
+name: Build
+
+# Build check: compile the plug-in, engine and app and assemble the installer on
+# every pull request and every push to main. Does not publish anything — the
+# resulting .pkg is uploaded only as a downloadable build artifact so a reviewer
+# can test it. Releases are handled separately by release.yml (on version tags).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14   # Apple Silicon (arm64)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build installer (.pkg)
+        run: |
+          bash packaging/build_pkg.sh
+          ls -lh dist
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ElevenRackDriver-pkg
+          path: dist/*.pkg
+          if-no-files-found: error

@@ -1,0 +1,74 @@
+name: Bug report
+description: Something isn't working with the Eleven Rack Driver
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for reporting! Please include as much detail as you can."
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "e.g. 14.5"
+    validations:
+      required: true
+
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      description: This driver is Apple Silicon only.
+      placeholder: "e.g. Mac mini (M2)"
+    validations:
+      required: true
+
+  - type: input
+    id: driver
+    attributes:
+      label: Driver version
+      description: From the installer file name or the menu-bar app.
+      placeholder: "e.g. 1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Audio (recording / playback)
+        - MIDI
+        - Menu-bar app / control panel
+        - Install / uninstall
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+
+  - type: textarea
+    id: status
+    attributes:
+      label: Menu-bar icon and panel state
+      description: >
+        Is the icon active / dimmed (device not connected) / red? What do the
+        meters and MIDI status show?
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Engine log (optional)
+      description: "Paste the contents of ~/Library/Logs/ElevenRack/engine.log"
+      render: text

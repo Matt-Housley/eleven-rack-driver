@@ -108,6 +108,10 @@ and the app after a single password prompt. (Your DAW projects are untouched.)
 
 Requires the Xcode command-line tools (for `clang`, `swiftc`, `pkgbuild`).
 
+Open **`Eleven Rack Driver.code-workspace`** in Visual Studio Code for a ready-to-go
+setup — it sets the C11/C++17 standards and `ElevenRackBridge` include path and
+recommends the Swift and C/C++ extensions. Then build the installer with:
+
 ```bash
 packaging/build_pkg.sh
 ```
