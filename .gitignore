@@ -1,0 +1,19 @@
+# Build output
+build/
+dist/
+*.o
+*.dSYM/
+
+# Compiled engine and diagnostic tools (built by install.sh / packaging/build_pkg.sh)
+ElevenRackBridge/erengine
+ElevenRackBridge/erprobe
+ElevenRackBridge/erstream
+ElevenRackBridge/erduplex
+ElevenRackBridge/erlanes
+ElevenRackBridge/erformat
+ElevenRackBridge/ringstat
+ElevenRackBridge/speedcheck
+
+# macOS
+.DS_Store
+._*

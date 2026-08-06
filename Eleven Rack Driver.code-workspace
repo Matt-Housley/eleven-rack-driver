@@ -1,0 +1,33 @@
+{
+    "folders": [
+        {
+            "name": "Eleven Rack Driver",
+            "path": "."
+        }
+    ],
+    "settings": {
+        "files.exclude": {
+            "**/.DS_Store": true,
+            "**/._*": true
+        },
+        "search.exclude": {
+            "**/build": true,
+            "**/dist": true
+        },
+        "files.associations": {
+            "ERAudioRing.h": "c",
+            "*.plist": "xml"
+        },
+        "C_Cpp.default.cStandard": "c11",
+        "C_Cpp.default.cppStandard": "c++17",
+        "C_Cpp.default.includePath": [
+            "${workspaceFolder}/ElevenRackBridge"
+        ]
+    },
+    "extensions": {
+        "recommendations": [
+            "swiftlang.swift-vscode",
+            "ms-vscode.cpptools"
+        ]
+    }
+}

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>co.uk.matthousley.ElevenRack</string>
+
+    <!-- Launch the menu-bar app; it supervises the USB engine. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/Eleven Rack.app/Contents/MacOS/ElevenRack</string>
+    </array>
+
+    <!-- Start at login. Relaunch on a crash, but NOT on a clean Quit, so the
+         menu-bar "Quit" item actually quits until the next login. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <!-- GUI agent: only load in the interactive (Aqua) session. -->
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+         font-size: 13px; line-height: 1.45; margin: 16px; color: #222; }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  ul { padding-left: 18px; } li { margin: 4px 0; }
+  .note { color: #666; font-size: 12px; margin-top: 12px; }
+  code { background: rgba(127,127,127,0.15); border-radius: 3px; padding: 0 3px; }
+  .warn { margin: 12px 0; padding: 9px 11px; border-radius: 6px;
+          background: rgba(255,159,10,0.12); border: 1px solid rgba(255,159,10,0.55); }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e8e8e8; }
+    .note { color: #a0a0a0; }
+  }
+</style></head>
+<body>
+  <h1>Eleven Rack Audio Driver</h1>
+  <p>This installs a user-space Core Audio driver for the Avid Eleven Rack. Your
+     Eleven Rack appears in Audio MIDI Setup and any DAW as an
+     <b>8-in / 6-out</b> device at 44.1, 48, 88.2 or 96&nbsp;kHz.</p>
+  <p class="warn"><b>Before you continue, quit any apps that are playing audio or
+     video</b> (Safari, Music, your DAW…). Installing restarts the macOS audio
+     service, which briefly interrupts playback and can leave a playing app stuck.</p>
+  <p>What gets installed:</p>
+  <ul>
+    <li>A Core Audio plug-in in <code>/Library/Audio/Plug-Ins/HAL</code></li>
+    <li>The <b>Eleven Rack</b> menu-bar app in <code>/Applications</code></li>
+    <li>A login item so the driver starts automatically</li>
+  </ul>
+  <p class="note">No kernel extension, no system extension, and no “Reduced
+     Security” change. The installer restarts the audio service and needs your
+     administrator password once.</p>
+</body>
+</html>

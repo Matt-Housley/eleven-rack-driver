@@ -1,0 +1,35 @@
+name: Release
+
+# Build the installer and attach it to a GitHub Release whenever a version tag
+# (e.g. v1.0.0) is pushed. Runs on an Apple Silicon macOS runner because the
+# driver is arm64-only.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14   # Apple Silicon (arm64)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build installer (.pkg)
+        run: |
+          # Version comes from the tag: v1.2.3 -> 1.2.3
+          export ER_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Building version $ER_VERSION"
+          bash packaging/build_pkg.sh
+          ls -lh dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.pkg
+          body_path: RELEASE_NOTES.md
+          fail_on_unmatched_files: true

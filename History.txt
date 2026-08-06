@@ -1,0 +1,39 @@
+Eleven Rack Driver — Version History
+====================================
+
+The version number here matches the installer in dist/ (Eleven Rack <version>.pkg)
+and the app's CFBundleShortVersionString. Newest release first.
+
+
+1.0.0  —  2026-08-06  —  Initial release
+------------------------------------------
+Audio
+  - User-space Core Audio driver for the Avid Eleven Rack on Apple Silicon.
+    No kernel extension, no DriverKit system extension, no "Reduced Security"
+    change — a signed HAL plug-in plus a small background USB engine.
+  - 8-in / 6-out, at 44.1, 48, 88.2 and 96 kHz, with the hardware clock following
+    the sample rate chosen in a DAW or Audio MIDI Setup.
+      Inputs:  Guitar In, Mic In, Eleven Rig L/R, Digital In L/R, Line In L/R
+      Outputs: Main Out L/R, Re-Amp L/R, Digital Out L/R
+  - Per-channel names shown in Audio MIDI Setup and in DAWs that read them.
+
+MIDI
+  - Works out of the box via macOS's built-in USB-MIDI driver, which exposes the
+    device as the "Eleven Rack Rig" and "Eleven Rack External" ports (in + out).
+    No bridging needed from this driver.
+
+Menu-bar app
+  - Status icon: active (streaming) / device-not-connected / engine-not-running,
+    drawn as a template so it inverts for light and dark menu bars.
+  - Full control panel: live per-channel RMS input/output meters, sample-rate
+    picker, MIDI status, "Open Audio MIDI Setup", "Restart Engine", "Launch at
+    login", and one-click "Uninstall…".
+
+Install / lifecycle
+  - Double-clickable .pkg installs the plug-in, engine, menu-bar app and a
+    per-user LaunchAgent, and restarts the audio service. Auto-starts at login.
+  - The engine releases the USB device cleanly on shutdown and never force-kills,
+    so stop/restart cannot leave the device wedged; startup rate query is time-
+    bounded so a busy coreaudiod cannot hang it.
+  - Meters use a spike-robust RMS with a short startup settle, so silent channels
+    read near zero rather than latching onto start-up transients.

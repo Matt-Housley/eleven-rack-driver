@@ -1,0 +1,43 @@
+#!/bin/bash
+# postinstall — runs as root after the payload is placed.
+#
+# 1. Load the per-user LaunchAgent into the logged-in user's GUI session so the
+#    menu-bar app starts immediately (it also auto-loads at every future login
+#    because it lives in /Library/LaunchAgents).
+# 2. Restart coreaudiod so it picks up the newly installed HAL plugin.
+#
+# No security settings are changed. Exits 0 even on soft failures so the install
+# is never marked failed for a cosmetic reason.
+
+set -u
+
+LABEL="co.uk.matthousley.ElevenRack"
+PLIST="/Library/LaunchAgents/${LABEL}.plist"
+
+# Kill any leftover engine (e.g. one orphaned by the previous app version) so it
+# releases the USB device before the fresh app starts.
+/usr/bin/pkill -f "/Applications/Eleven Rack.app/Contents/Resources/erengine" 2>/dev/null || true
+
+consoleUser="$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)"
+if [ -n "${consoleUser}" ] && [ "${consoleUser}" != "root" ] && [ "${consoleUser}" != "loginwindow" ]; then
+    uid="$(/usr/bin/id -u "${consoleUser}" 2>/dev/null || true)"
+    if [ -n "${uid}" ] && [ -f "${PLIST}" ]; then
+        # Unload any previous instance, then wait for it to fully exit before
+        # reloading (bootout is asynchronous; bootstrapping too soon can fail and
+        # leave the agent unloaded).
+        /bin/launchctl bootout "gui/${uid}/${LABEL}" 2>/dev/null || true
+        for _ in 1 2 3 4 5; do
+            /bin/launchctl print "gui/${uid}/${LABEL}" >/dev/null 2>&1 || break
+            /bin/sleep 1
+        done
+        # Bootstrap, retrying once in case the domain is briefly busy.
+        /bin/launchctl bootstrap "gui/${uid}" "${PLIST}" 2>/dev/null \
+            || { /bin/sleep 1; /bin/launchctl bootstrap "gui/${uid}" "${PLIST}" 2>/dev/null; } \
+            || true
+    fi
+fi
+
+# Reload the HAL plugin.
+/usr/bin/killall coreaudiod 2>/dev/null || true
+
+exit 0

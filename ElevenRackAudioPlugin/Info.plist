@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<!-- The executable name must match the dylib Xcode builds from ElevenRackAudioPlugin.cpp.
+	     The bundle extension is .driver (not .plugin) for AudioServerPlugins. -->
+	<key>CFBundleExecutable</key>
+	<string>ElevenRackAudioPlugin</string>
+	<key>CFBundleIdentifier</key>
+	<string>uk.co.matthousley.ElevenRackInstaller.ElevenRackAudioPlugin</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>ElevenRackAudioPlugin</string>
+	<!-- AudioServerPlugin bundles use BNDL (a loadable bundle / dylib), not APPL. -->
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+
+	<!-- CF plugin registration.
+	     coreaudiod scans /Library/Audio/Plug-Ins/HAL/ for bundles whose CFPlugInTypes
+	     contains kAudioServerPlugInTypeUUID = 443ABAB8-E7B3-491A-B985-BEB9187030DB.
+	     It then calls the factory function (CFPlugInFactories) to get the driver interface.
+
+	     The factory UUID below was generated once for this plugin bundle and must never
+	     change after first deployment (it is baked into user audio prefs). -->
+	<key>CFPlugInDynamicRegistration</key>
+	<string>NO</string>
+	<key>CFPlugInFactories</key>
+	<dict>
+		<!-- ElevenRack factory UUID — do not change -->
+		<key>7EA21218-AD0D-48C2-BC32-30D778CAF698</key>
+		<string>ElevenRackAudioPluginCreate</string>
+	</dict>
+	<key>CFPlugInTypes</key>
+	<dict>
+		<!-- kAudioServerPlugInTypeUUID = 443ABAB8-E7B3-491A-B985-BEB9187030DB
+		     (verified against CFUUIDCreateString(kAudioServerPlugInTypeUUID);
+		     an earlier wrong value here stopped coreaudiod finding the factory). -->
+		<key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key>
+		<array>
+			<string>7EA21218-AD0D-48C2-BC32-30D778CAF698</string>
+		</array>
+	</dict>
+</dict>
+</plist>
