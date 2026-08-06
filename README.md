@@ -20,7 +20,7 @@ device at **44.1, 48, 88.2 or 96 kHz**.
 
 ## Install
 
-1. Download **`Eleven Rack <version>.pkg`** from the
+1. Download **`ElevenRackDriver-<version>.pkg`** from the
    [Releases](../../releases) page.
 2. Double-click it and follow the installer. It asks for your administrator
    password once (to install the plug-in and restart the audio service) — it
@@ -113,7 +113,7 @@ packaging/build_pkg.sh
 ```
 
 This builds and ad-hoc-signs the HAL plug-in, the USB engine, and the menu-bar
-app, then produces `dist/Eleven Rack <version>.pkg`.
+app, then produces `dist/ElevenRackDriver-<version>.pkg`.
 
 To ship a notarized, warning-free installer, set `SIGN_ID` to a *Developer ID
 Application* identity and `PKG_SIGN_ID` to a *Developer ID Installer* identity

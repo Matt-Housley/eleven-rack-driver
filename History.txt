@@ -1,7 +1,7 @@
 Eleven Rack Driver — Version History
 ====================================
 
-The version number here matches the installer in dist/ (Eleven Rack <version>.pkg)
+The version number here matches the installer in dist/ (ElevenRackDriver-<version>.pkg)
 and the app's CFBundleShortVersionString. Newest release first.
 
 

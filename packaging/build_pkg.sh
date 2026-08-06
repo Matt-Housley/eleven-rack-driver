@@ -36,7 +36,7 @@ BUILD="${ER_BUILD_DIR:-/private/tmp/ElevenRack-build}"
 STAGE="$BUILD/root"
 DIST="$ROOT/dist"
 COMPONENT="$BUILD/ElevenRackComponent.pkg"
-PRODUCT="$DIST/Eleven Rack $VERSION.pkg"
+PRODUCT="$DIST/ElevenRackDriver-$VERSION.pkg"   # space-free so GitHub keeps the asset name intact
 
 APP="$STAGE/Applications/Eleven Rack.app"
 DRIVER="$STAGE/Library/Audio/Plug-Ins/HAL/Eleven Rack.driver"

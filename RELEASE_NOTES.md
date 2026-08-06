@@ -9,7 +9,7 @@ Setup and any DAW as an **8-in / 6-out** device.
 
 ## Install
 
-1. Download **`Eleven Rack 1.0.0.pkg`** from this release's assets.
+1. Download **`ElevenRackDriver-1.0.0.pkg`** from this release's assets.
 2. Double-click it and follow the installer (it asks for your admin password
    once and restarts the audio service — **quit apps that are playing audio or
    video first**).
