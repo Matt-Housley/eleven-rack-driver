@@ -1,0 +1,75 @@
+name: CodeQL
+
+# Advanced CodeQL setup. The project is built with raw clang/swiftc via shell
+# scripts (no Xcode project), which the default setup's autobuild can't drive —
+# so C/C++ and Swift are compiled manually here, letting CodeQL observe the
+# compilers and analyse the real code. Actions workflows are analysed too.
+#
+# NOTE: GitHub can't run this while "Default" code scanning is enabled for the
+# repo. Switch it to "Advanced" (Settings -> Code security -> CodeQL analysis)
+# so this workflow is the single configuration.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '25 6 * * 1'   # weekly, Mondays
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: macos-14   # Apple Silicon; needed to build the macOS C/C++ and Swift code
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: c-cpp
+            build-mode: manual
+          - language: swift
+            build-mode: manual
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Build C/C++ (plug-in, engine, diagnostic tools)
+        if: matrix.language == 'c-cpp'
+        run: |
+          set -euxo pipefail
+          for f in ElevenRackBridge/*.c; do
+            clang -O0 -c "$f" -I ElevenRackBridge -o "/tmp/$(basename "$f").o" \
+              -Wno-deprecated-declarations
+          done
+          clang++ -std=c++17 -O0 -c ElevenRackAudioPlugin/ElevenRackAudioPlugin.cpp \
+            -I ElevenRackBridge -o /tmp/plugin.o -Wno-deprecated-declarations
+
+      - name: Build Swift (menu-bar app)
+        if: matrix.language == 'swift'
+        run: |
+          set -euxo pipefail
+          swiftc -o /tmp/ElevenRackApp \
+            ElevenRackApp/*.swift \
+            -import-objc-header ElevenRackApp/ElevenRack-Bridging-Header.h \
+            -I ElevenRackBridge \
+            -framework AppKit -framework SwiftUI -framework CoreAudio -framework CoreMIDI \
+            -target arm64-apple-macosx13.0
+
+      - name: Perform analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
