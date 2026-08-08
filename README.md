@@ -20,8 +20,8 @@ device at **44.1, 48, 88.2 or 96 kHz**.
 
 ## Install
 
-1. Download **`ElevenRackDriver-<version>.pkg`** from the
-   [Releases](../../releases) page.
+1. Download **`ElevenRackDriver-1.0.1.pkg`** from the
+   [latest release](../../releases/latest) ([all releases](../../releases)).
 2. Double-click it and follow the installer. It asks for your administrator
    password once (to install the plug-in and restart the audio service) — it
    changes **no** security settings.
