@@ -15,5 +15,5 @@
         <pkg-ref id="co.uk.matthousley.ElevenRack.pkg"/>
     </choice>
 
-    <pkg-ref id="co.uk.matthousley.ElevenRack.pkg" version="1.0.0" onConclusion="none">ElevenRackComponent.pkg</pkg-ref>
+    <pkg-ref id="co.uk.matthousley.ElevenRack.pkg" version="1.0.1" onConclusion="none">ElevenRackComponent.pkg</pkg-ref>
 </installer-gui-script>

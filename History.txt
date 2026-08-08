@@ -5,6 +5,22 @@ The version number here matches the installer in dist/ (ElevenRackDriver-<versio
 and the app's CFBundleShortVersionString. Newest release first.
 
 
+1.0.1  —  2026-08-08  —  Maintenance / hardening
+-------------------------------------------------
+Audio
+  - Plug-in: fixed a potential 32-bit integer overflow when computing the audio
+    buffer size — the frame count is now widened to size_t before multiplying by
+    the channel count and sample size, so large buffers can never wrap.
+
+Project / CI
+  - GitHub Actions: build check on every pull request and push, plus a tagged
+    release workflow that builds and publishes the installer automatically.
+  - CodeQL security scanning of the C/C++ (plug-in, engine, tools) and the
+    Actions workflows; all outstanding code-scanning alerts resolved.
+  - Build now stamps the plug-in, app and installer versions from a single
+    source, so every component reports the same release number.
+
+
 1.0.0  —  2026-08-06  —  Initial release
 ------------------------------------------
 Audio

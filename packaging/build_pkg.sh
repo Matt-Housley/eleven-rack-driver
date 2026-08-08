@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # ---- configuration ---------------------------------------------------------
-VERSION="${ER_VERSION:-1.0.0}"     # override via ER_VERSION (the release workflow passes the tag)
+VERSION="${ER_VERSION:-1.0.1}"     # override via ER_VERSION (the release workflow passes the tag)
 SIGN_ID="${SIGN_ID:--}"            # code signing identity ("-" = ad-hoc)
 PKG_SIGN_ID="${PKG_SIGN_ID:-}"     # installer signing identity ("" = unsigned)
 IDENTIFIER="co.uk.matthousley.ElevenRack.pkg"
@@ -62,6 +62,9 @@ mkdir -p "$DRIVER/Contents/MacOS" "$APP/Contents/MacOS" "$APP/Contents/Resources
 # ---- 1. HAL plugin bundle --------------------------------------------------
 echo "==> Building HAL plugin"
 cp "$PLUGIN_INFO" "$DRIVER/Contents/Info.plist"
+# Stamp the plug-in version to match the package.
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$DRIVER/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$DRIVER/Contents/Info.plist" 2>/dev/null || true
 clang++ -std=c++17 -O2 -bundle "$PLUGIN_SRC" \
     -o "$DRIVER/Contents/MacOS/ElevenRackAudioPlugin" \
     -I "$BRIDGE_DIR" \
@@ -130,7 +133,12 @@ pkgbuild --root "$STAGE" \
 
 # ---- 6. Product (distribution) pkg ----------------------------------------
 echo "==> productbuild"
-productbuild --distribution "$PKG_DIR/distribution.xml" \
+# Stamp the pkg-ref version in a temp copy of the distribution so the installer
+# reports $VERSION without editing the source file.
+DIST_XML="$BUILD/distribution.xml"
+sed -E "s/(version=\"[0-9.]+\" onConclusion)/version=\"$VERSION\" onConclusion/" \
+    "$PKG_DIR/distribution.xml" > "$DIST_XML"
+productbuild --distribution "$DIST_XML" \
     --resources "$PKG_DIR/resources" \
     --package-path "$BUILD" \
     "$PRODUCT"

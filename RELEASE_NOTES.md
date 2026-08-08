@@ -1,4 +1,4 @@
-# Eleven Rack Driver — v1.0.0
+# Eleven Rack Driver — v1.0.1
 
 A macOS Core Audio driver for the Avid **Eleven Rack** that runs **entirely in
 user space** — no kernel extension, no DriverKit system extension, and no
@@ -7,9 +7,24 @@ Setup and any DAW as an **8-in / 6-out** device.
 
 > **Requirements:** Apple Silicon Mac, macOS 13 or later.
 
+## What's changed since 1.0.0
+
+This is a small maintenance and hardening release. Nothing you do changes — it's
+a safe, recommended update.
+
+- **Plug-in:** fixed a potential 32-bit integer overflow when computing the audio
+  buffer size (the frame count is now widened before multiplying by channel count
+  and sample size), so large buffers can never wrap.
+- **Continuous integration:** builds are now checked on every change, and this
+  installer was built and published automatically by the release workflow.
+- **Security scanning:** CodeQL now analyses the C/C++ (plug-in, engine, tools)
+  and the build workflows; all outstanding alerts are resolved.
+- **Versioning:** the plug-in, menu-bar app and installer all report the same
+  version, stamped from a single source at build time.
+
 ## Install
 
-1. Download **`ElevenRackDriver-1.0.0.pkg`** from this release's assets.
+1. Download **`ElevenRackDriver-1.0.1.pkg`** from this release's assets.
 2. Double-click it and follow the installer (it asks for your admin password
    once and restarts the audio service — **quit apps that are playing audio or
    video first**).
