@@ -12,6 +12,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# This workflow only needs to read the repo (checkout) and upload an artifact;
+# lock the default token down to read-only.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: macos-14   # Apple Silicon (arm64)
