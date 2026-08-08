@@ -1334,7 +1334,9 @@ static OSStatus ERP_DoIOOperation(AudioServerPlugInDriverRef,
 
     UInt32 numCh  = (inStreamObjectID == kObjectID_Stream_Input) ? kNumInputChannels
                                                                   : kNumOutputChannels;
-    UInt32 bytes  = inIOBufferFrameSize * numCh * sizeof(float);
+    // Compute in size_t so the multiplication can't overflow a 32-bit intermediate
+    // before it becomes the byte count.
+    size_t bytes  = (size_t)inIOBufferFrameSize * numCh * sizeof(float);
 
     if (!sRing) TryAttachRing();   // app may have started after StartIO
 
