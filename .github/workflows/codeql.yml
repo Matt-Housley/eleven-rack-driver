@@ -1,13 +1,20 @@
 name: CodeQL
 
-# Advanced CodeQL setup. The project is built with raw clang/swiftc via shell
-# scripts (no Xcode project), which the default setup's autobuild can't drive —
-# so C/C++ and Swift are compiled manually here, letting CodeQL observe the
-# compilers and analyse the real code. Actions workflows are analysed too.
+# Advanced CodeQL setup. The native code (HAL plug-in, USB engine, diagnostic
+# tools) is built with raw clang via a shell script — no Xcode/CMake project —
+# which the default setup's autobuild can't drive, so C/C++ is compiled manually
+# here so CodeQL can trace and analyse it. GitHub Actions workflows are analysed
+# too.
 #
-# NOTE: GitHub can't run this while "Default" code scanning is enabled for the
-# repo. Switch it to "Advanced" (Settings -> Code security -> CodeQL analysis)
-# so this workflow is the single configuration.
+# Swift (the menu-bar app) is deliberately NOT scanned: CodeQL traces compiled
+# builds by injecting a library via DYLD_INSERT_LIBRARIES, which macOS SIP strips
+# from Apple's signed swiftc/swift-frontend — so a raw-swiftc build (no Xcode or
+# SwiftPM project) can't be extracted. The app is UI glue with almost no native
+# security surface; the security-relevant code (USB, shared-memory ring, HAL
+# plug-in) is the C/C++ that IS scanned here.
+#
+# NOTE: GitHub can't run this while "Default" code scanning is enabled. Switch it
+# to "Advanced" (Settings -> Code security -> CodeQL analysis).
 
 on:
   push:
@@ -25,7 +32,7 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: macos-14   # Apple Silicon; needed to build the macOS C/C++ and Swift code
+    runs-on: macos-14   # Apple Silicon; needed to build the macOS C/C++ code
     strategy:
       fail-fast: false
       matrix:
@@ -33,8 +40,6 @@ jobs:
           - language: actions
             build-mode: none
           - language: c-cpp
-            build-mode: manual
-          - language: swift
             build-mode: manual
 
     steps:
@@ -57,17 +62,6 @@ jobs:
           done
           clang++ -std=c++17 -O0 -c ElevenRackAudioPlugin/ElevenRackAudioPlugin.cpp \
             -I ElevenRackBridge -o /tmp/plugin.o -Wno-deprecated-declarations
-
-      - name: Build Swift (menu-bar app)
-        if: matrix.language == 'swift'
-        run: |
-          set -euxo pipefail
-          swiftc -o /tmp/ElevenRackApp \
-            ElevenRackApp/*.swift \
-            -import-objc-header ElevenRackApp/ElevenRack-Bridging-Header.h \
-            -I ElevenRackBridge \
-            -framework AppKit -framework SwiftUI -framework CoreAudio -framework CoreMIDI \
-            -target arm64-apple-macosx13.0
 
       - name: Perform analysis
         uses: github/codeql-action/analyze@v3
