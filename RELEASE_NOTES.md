@@ -1,4 +1,4 @@
-# Eleven Rack Driver — v1.0.1
+# Eleven Rack Driver — v1.0.2
 
 A macOS Core Audio driver for the Avid **Eleven Rack** that runs **entirely in
 user space** — no kernel extension, no DriverKit system extension, and no
@@ -7,24 +7,23 @@ Setup and any DAW as an **8-in / 6-out** device.
 
 > **Requirements:** Apple Silicon Mac, macOS 13 or later.
 
-## What's changed since 1.0.0
+## What's changed since 1.0.1
 
-This is a small maintenance and hardening release. Nothing you do changes — it's
-a safe, recommended update.
+- **Menu-bar icon fix.** The icon could look bright/"Active" when no Eleven Rack
+  was connected (a leftover buffer from a previous session was misread as a live
+  device). A disconnected device now correctly shows the dimmed "device not
+  connected" icon.
 
-- **Plug-in:** fixed a potential 32-bit integer overflow when computing the audio
-  buffer size (the frame count is now widened before multiplying by channel count
-  and sample size), so large buffers can never wrap.
-- **Continuous integration:** builds are now checked on every change, and this
-  installer was built and published automatically by the release workflow.
-- **Security scanning:** CodeQL now analyses the C/C++ (plug-in, engine, tools)
-  and the build workflows; all outstanding alerts are resolved.
-- **Versioning:** the plug-in, menu-bar app and installer all report the same
-  version, stamped from a single source at build time.
+> **Known issue — dropouts during general-purpose playback:** when the Eleven
+> Rack is used as an everyday output (e.g. streaming from Music), you may hear
+> periodic dropouts, worse when another app starts playing. This is **not** fixed
+> in 1.0.2 — the audio path is unchanged from 1.0.1. A proper fix (a
+> hardware-timestamped timeline) is in progress for a later release. For critical
+> recording/playback in a DAW the device works as before.
 
 ## Install
 
-1. Download **`ElevenRackDriver-1.0.1.pkg`** from this release's assets.
+1. Download **`ElevenRackDriver-1.0.2.pkg`** from this release's assets.
 2. Double-click it and follow the installer (it asks for your admin password
    once and restarts the audio service — **quit apps that are playing audio or
    video first**).

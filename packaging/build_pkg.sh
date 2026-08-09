@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # ---- configuration ---------------------------------------------------------
-VERSION="${ER_VERSION:-1.0.1}"     # override via ER_VERSION (the release workflow passes the tag)
+VERSION="${ER_VERSION:-1.0.2}"     # override via ER_VERSION (the release workflow passes the tag)
 SIGN_ID="${SIGN_ID:--}"            # code signing identity ("-" = ad-hoc)
 PKG_SIGN_ID="${PKG_SIGN_ID:-}"     # installer signing identity ("" = unsigned)
 IDENTIFIER="co.uk.matthousley.ElevenRack.pkg"

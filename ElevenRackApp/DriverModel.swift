@@ -106,7 +106,10 @@ final class DriverModel: ObservableObject {
         ring.attachIfNeeded()
 
         var ringSampleRate: UInt32 = 0
-        if let act = ring.poll() {          // nil (and detaches) if the ring went stale
+        // Require engineRunning: a ring can outlive its engine (valid magic, stale
+        // contents). Only when the engine reports it is running do we trust the ring
+        // for Active/idle; otherwise fall through to the supervision-based state.
+        if let act = ring.poll(), act.engineRunning {
             ringSampleRate = act.sampleRate
             status = act.enginePulling ? .active : .idleNoDevice
             // Overruns only matter while an app is actually pulling audio through

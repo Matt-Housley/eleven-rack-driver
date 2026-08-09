@@ -68,12 +68,17 @@ final class RingReader {
         let dOW = ow &- lastOutWrite
         let dX = x &- lastXrun
         lastInWrite = w; lastInRead = rd; lastOutWrite = ow; lastXrun = x
+        // Only trust capture/xrun deltas as "device streaming" when the engine says
+        // it is actually running. A stale leftover ring (engine gone, engineRunning
+        // == 0) can keep valid magic and a drifting garbage xrun value, which would
+        // otherwise be misread as an active device.
+        let running = r.pointee.engineRunning != 0
         return RingActivity(
-            enginePulling: dW > 0 || dX > 0,
+            enginePulling: running && (dW > 0 || dX > 0),
             consumerActive: dRd > 0 || dOW > 0,
             xrunDelta: dX,
             sampleRate: r.pointee.sampleRate,
-            engineRunning: r.pointee.engineRunning != 0)
+            engineRunning: running)
     }
 
     /// Live per-channel input levels (count == ER.inputNames.count). Zeros if
