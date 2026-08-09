@@ -82,13 +82,64 @@ saturates and overruns **every frame (~48000/s)**. The menu-bar app then reports
 "Active" for a stale ring — it now trusts `engineRunning`. See
 `RingReader.swift` / `DriverModel.swift`.)
 
-## Fix design (the real work)
+## Leading hypothesis: we don't implement the time-addressed ring contract
 
-> **Update:** Option B (hardware-referenced timeline) has been **tried and
-> disproven** — the multi-client deficit is timeline-independent (see above). The
-> remaining candidates are Option A (engine-side async SRC) and, more likely
-> needed, a **direct investigation of why coreaudiod's multi-client mixer
-> under-delivers to this AudioServerPlugIn device** (Option C).
+Research into the canonical AudioServerPlugIn pattern (Apple's `NullAudio` /
+`SimpleAudioDriver` samples; ExistentialAudio **BlackHole**) points at a
+fundamental divergence in *how our driver's IO works*, which fits the
+single-client-OK / multi-client-broken signature:
+
+**Canonical model (BlackHole, Apple samples):**
+- The device exposes a **fixed-size ring buffer** (BlackHole uses
+  `kDevice_RingBufferSize = 16384` frames).
+- `kAudioDevicePropertyZeroTimeStampPeriod` == the **ring buffer size**.
+- `GetZeroTimeStamp` returns sample times that are **multiples of the ring size**
+  (wrap boundaries), host time anchored to `mach_absolute_time` at the nominal
+  rate. (Confirms our timeline-independence result — the reference timeline is
+  nominal too.)
+- **`DoIOOperation` positions every read/write in the ring by the IO cycle's
+  sample time** — offset ≈ `mSampleTime % ringSize`. Apple's header: *"positions
+  within the ring buffer correspond to a particular time."* Overlapping/repeated
+  sample-time ranges from the host are written at the same positions.
+
+**What we do instead:** a **FIFO producer/consumer** — `DoIOOperation` calls
+`er_out_write(...)` which **appends** sequentially and **ignores the cycle sample
+time**; `ZeroTimeStampPeriod` is the small IO buffer, not a ring size; the USB
+engine drains the FIFO rather than reading at a timeline-derived play position.
+
+**Why this explains the symptom:** with one client the host issues WriteMix once
+per cycle at sequential sample times, so append ≡ positioned-write and it works.
+When a second client mixes in, the host's output scheduling issues WriteMix cycles
+whose sample-time ranges are no longer a simple sequential stream (overlap /
+re-issue / different phase). A FIFO that ignores sample time cannot place those
+correctly — frames land in the wrong order/among each other and net delivery to
+the engine drops (~5%), which is exactly what `dOut` shows. No timeline/buffer
+tweak fixes it because the *addressing model* is wrong, not the clock.
+
+### Fix: adopt the canonical time-addressed ring
+
+Restructure the shared transport so it is a fixed-size ring addressed by absolute
+sample time on both sides:
+- Report `ZeroTimeStampPeriod` = the ring size; `GetZeroTimeStamp` returns
+  ring-size-multiple sample times anchored to host time (keep the nominal clock).
+- In `DoIOOperation`, write/read at `offset = frameSampleTime % ringSize` (derive
+  the base sample time from `inIOCycleInfo->mOutputTime.mSampleTime` /
+  `mInputTime.mSampleTime`), instead of `er_out_write`/`er_in_read` FIFO.
+- The USB engine reads playback from the ring at the **play head** (current device
+  sample time, trailing the write head by the safety offset), and writes capture
+  at the record head — both indexed by sample time, not FIFO counters.
+
+Study first: BlackHole `BlackHole_DoIOOperation` + `BlackHole_GetZeroTimeStamp`
+(github.com/ExistentialAudio/BlackHole) and Apple's `NullAudio.c`. Verify the fix
+against the two-client repro (`dOut` must stay ~48000 with Safari open).
+
+## Earlier fix ideas (superseded by the hypothesis above)
+
+> **Update:** Option B (hardware-referenced timeline) is **tried and disproven** —
+> the deficit is timeline-independent. Option A (engine-side async SRC) treats the
+> symptom, not the cause. Option C below (compare to a reference driver) is now
+> subsumed by the concrete hypothesis above — but running BlackHole through the
+> two-client repro is still the fastest way to confirm it before the rewrite.
 
 ### Option C — Understand coreaudiod's multi-client behavior (do this first)
 
