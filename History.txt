@@ -5,21 +5,26 @@ The version number here matches the installer in dist/ (ElevenRackDriver-<versio
 and the app's CFBundleShortVersionString. Newest release first.
 
 
-1.0.2  —  2026-08-09  —  Menu-bar icon fix
-------------------------------------------
-Menu-bar app
+1.0.2  —  UNRELEASED (in progress) — general-purpose playback dropout fix
+------------------------------------------------------------------------
+This release is held until the playback dropouts are actually fixed — it will
+ship as a single quality build, not piecemeal.
+
+Audio (the headline fix — NOT yet done)
+  - Fix the general-purpose-playback dropouts: coreaudiod under-delivers playback
+    ~4% versus the device's consumption (a clock-domain mismatch), starving the
+    ring. Requires proper clock synchronisation (async sample-rate conversion in
+    the engine, or a hardware-referenced timeline). Root cause + design in
+    docs/PLAYBACK_DROPOUT_ANALYSIS.md. Earlier quick attempts (a clock-drift servo,
+    a larger safety offset, a prebuffer, larger IO buffers) were all disproven and
+    backed out.
+
+Menu-bar app (ready, folded into this release)
   - Fixed the status icon showing bright/"Active" when no Eleven Rack was
     connected. A leftover shared ring from a previous session could keep valid
     contents with a drifting xrun value, which was misread as a live device. The
     app now trusts the engine's "running" flag, so a disconnected device correctly
     shows the dimmed "device not connected" icon.
-
-Audio
-  - No audio changes. Work on the general-purpose-playback dropouts (a slow clock
-    drift, plus scheduling-jitter bursts) is still in progress: attempts at a
-    clock-drift servo and a larger safety offset both destabilised Core Audio's
-    IO timing on this driver and were backed out. This needs a proper
-    hardware-timestamped timeline and will land in a later release.
 
 
 1.0.1  —  2026-08-08  —  Maintenance / hardening

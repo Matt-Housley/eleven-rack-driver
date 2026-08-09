@@ -1,4 +1,9 @@
-# Eleven Rack Driver — v1.0.2
+# Eleven Rack Driver — v1.0.2 (DRAFT — HELD, do not release)
+
+> **This release is intentionally held.** 1.0.2 will ship as one quality build
+> that **fixes the general-purpose playback dropouts** — it is not to be released
+> as an icon-only update. Rewrite these notes and remove this banner only once the
+> audio fix below is implemented and verified.
 
 A macOS Core Audio driver for the Avid **Eleven Rack** that runs **entirely in
 user space** — no kernel extension, no DriverKit system extension, and no
@@ -9,17 +14,14 @@ Setup and any DAW as an **8-in / 6-out** device.
 
 ## What's changed since 1.0.1
 
-- **Menu-bar icon fix.** The icon could look bright/"Active" when no Eleven Rack
-  was connected (a leftover buffer from a previous session was misread as a live
-  device). A disconnected device now correctly shows the dimmed "device not
-  connected" icon.
-
-> **Known issue — dropouts during general-purpose playback:** when the Eleven
-> Rack is used as an everyday output (e.g. streaming from Music), you may hear
-> periodic dropouts, worse when another app starts playing. This is **not** fixed
-> in 1.0.2 — the audio path is unchanged from 1.0.1. A proper fix (a
-> hardware-timestamped timeline) is in progress for a later release. For critical
-> recording/playback in a DAW the device works as before.
+- **Playback dropout fix (the headline — in progress, not yet done).** Fixes the
+  clicks/pops/silences when using the Eleven Rack as a general-purpose output.
+  Root cause: coreaudiod under-delivers playback ~4% versus the device's
+  consumption (a clock-domain mismatch). See `docs/PLAYBACK_DROPOUT_ANALYSIS.md`.
+- **Menu-bar icon fix (ready).** The icon could look bright/"Active" when no
+  Eleven Rack was connected (a leftover buffer from a previous session was misread
+  as a live device). A disconnected device now correctly shows the dimmed "device
+  not connected" icon.
 
 ## Install
 
