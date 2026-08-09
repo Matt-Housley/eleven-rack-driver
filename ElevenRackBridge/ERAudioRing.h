@@ -36,8 +36,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-#define ER_RING_MAGIC    0x34314552u        /**< Header magic ('R','E','1','4') identifying the v4 layout. */
-#define ER_RING_VERSION  4u                 /**< Shared-layout version; bump on any struct change. */
+#define ER_RING_MAGIC    0x35314552u        /**< Header magic ('R','E','1','5') identifying the v5 layout. */
+#define ER_RING_VERSION  5u                 /**< Shared-layout version; bump on any struct change. */
 #define ER_RING_NAME     "/ElevenRackAudioRing" /**< POSIX shared-memory object name. */
 #define ER_IN_CH         8u                 /**< Capture channel count (device → Core Audio). */
 #define ER_OUT_CH        6u                 /**< Playback channel count (Core Audio → device). */
@@ -90,6 +90,23 @@ typedef struct {
      */
     float inLevel [ER_IN_CH];   /**< Live input peak per capture channel. */
     float outLevel[ER_OUT_CH];  /**< Live output peak per playback channel. */
+    /** @} */
+
+    /**
+     * @name WriteMix call-pattern diagnostics (temporary)
+     * The plugin records, per playback DoIOOperation(WriteMix) call, how the host's
+     * output sample-time ranges relate call-to-call: sequential (append-equivalent),
+     * backward/overlapping, or gapped — plus how often the client id changes. Used
+     * to confirm whether coreaudiod interleaves multiple clients (which a FIFO
+     * append mis-handles). Written by the plugin, read by a diagnostic tool.
+     * @{
+     */
+    uint32_t dbgWmCount;          /**< Total WriteMix calls. */
+    uint32_t dbgWmSeq;            /**< Calls whose sample time continued the previous (sequential). */
+    uint32_t dbgWmBack;           /**< Calls whose sample time went backward/overlapped. */
+    uint32_t dbgWmGap;            /**< Calls whose sample time jumped forward (gap). */
+    uint32_t dbgWmClientChanges;  /**< Times the client id differed from the previous call. */
+    uint32_t dbgWmLastClient;     /**< Most recent client id seen. */
     /** @} */
 } ERRing;
 

@@ -1324,9 +1324,9 @@ static OSStatus ERP_BeginIOOperation(AudioServerPlugInDriverRef, AudioObjectID, 
 static OSStatus ERP_DoIOOperation(AudioServerPlugInDriverRef,
                                    AudioObjectID inDeviceObjectID,
                                    AudioObjectID inStreamObjectID,
-                                   UInt32 /*inClientID*/, UInt32 /*inOperationID*/,
+                                   UInt32 inClientID, UInt32 /*inOperationID*/,
                                    UInt32 inIOBufferFrameSize,
-                                   const AudioServerPlugInIOCycleInfo*,
+                                   const AudioServerPlugInIOCycleInfo* inIOCycleInfo,
                                    void* ioMainBuffer, void* /*ioSecondaryBuffer*/)
 {
     if (inDeviceObjectID != kObjectID_Device) return kAudioHardwareBadObjectError;
@@ -1348,6 +1348,21 @@ static OSStatus ERP_DoIOOperation(AudioServerPlugInDriverRef,
         if (sRing && numCh == ER_IN_CH)
             er_in_read(sRing, static_cast<float*>(ioMainBuffer), inIOBufferFrameSize);
     } else if (inStreamObjectID == kObjectID_Stream_Output) {
+        // --- diagnostics: how does the host sequence WriteMix sample-time ranges?
+        //     Sequential call-to-call ≈ our FIFO append is fine; backward/gapped or
+        //     frequent client changes ⇒ multi-client interleave a FIFO mis-handles.
+        if (sRing && inIOCycleInfo) {
+            static double sPrevWmEnd = -1.0;
+            double s = inIOCycleInfo->mOutputTime.mSampleTime;
+            if (sPrevWmEnd >= 0.0) {
+                if (s == sPrevWmEnd)      sRing->dbgWmSeq++;
+                else if (s < sPrevWmEnd)  sRing->dbgWmBack++;
+                else                      sRing->dbgWmGap++;
+            }
+            sPrevWmEnd = s + (double)inIOBufferFrameSize;
+            sRing->dbgWmCount++;
+            if (inClientID != sRing->dbgWmLastClient) { sRing->dbgWmClientChanges++; sRing->dbgWmLastClient = inClientID; }
+        }
         // Playback: push CoreAudio's frames into the output ring for the app's USB
         // engine to send to the device. Drops on overrun (tracked as an xrun).
         if (sRing && numCh == ER_OUT_CH)
