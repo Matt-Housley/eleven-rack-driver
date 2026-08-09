@@ -84,10 +84,27 @@ saturates and overruns **every frame (~48000/s)**. The menu-bar app then reports
 
 ## Fix design (the real work)
 
-The producer (coreaudiod, software clock) and consumer (device, hardware clock)
-are in **different clock domains** and must be reconciled. Two options:
+> **Update:** Option B (hardware-referenced timeline) has been **tried and
+> disproven** — the multi-client deficit is timeline-independent (see above). The
+> remaining candidates are Option A (engine-side async SRC) and, more likely
+> needed, a **direct investigation of why coreaudiod's multi-client mixer
+> under-delivers to this AudioServerPlugIn device** (Option C).
 
-### Option A — Asynchronous sample-rate conversion in the engine (recommended)
+### Option C — Understand coreaudiod's multi-client behavior (do this first)
+
+The deficit appears only with a second client and is unaffected by every driver
+timeline/buffer/offset change tried. Before writing more driver code, determine
+what coreaudiod actually does when the second client attaches:
+- Compare against a reference virtual driver (BlackHole) on the same Mac: does it
+  also drop ~5% with two clients, or stay clean? If BlackHole is clean, diff its
+  AudioServerPlugIn property/format/latency reporting against ours — we are
+  missing part of the contract coreaudiod's mixer relies on.
+- Capture `HALS`/coreaudiod internal logs at the moment the second client attaches
+  (client-add, format negotiation, IO restart, overload).
+- Check whether the second client opens the device at a different stream format /
+  rate and whether coreaudiod inserts an ASRC whose ratio is wrong.
+
+### Option A — Asynchronous sample-rate conversion in the engine
 
 Make the engine resample coreaudiod's playback stream from its delivered rate to
 the device's true rate, driven by a control loop on the ring fill level:
@@ -101,19 +118,34 @@ the device's true rate, driven by a control loop on the ring fill level:
 - This is the standard USB-audio playback approach (adaptive/async endpoints).
 - Do the same, symmetrically, for capture if capture drift ever matters.
 
-### Option B — Hardware-referenced timeline in the plug-in
+### Option B — Hardware-referenced timeline in the plug-in — DISPROVEN
 
-Make `GetZeroTimeStamp` report a timeline **derived from the engine's actual ring
-consumption** (`outRead` progress vs host time) via a proper DLL, so coreaudiod
-locks its production rate to the device's true rate. This is what BlackHole /
-Apple's `SimpleAudioDriver` effectively do. Note the earlier failed servo was a
-*level* servo; this must be a *frequency-lock DLL* on real consumption, smoothed
-and clamped. Higher risk (it's on coreaudiod's RT path) but no resampling.
+Reworking `GetZeroTimeStamp` to lock Core Audio's clock to `hwFrames` (both raw
+and smoothed/phase-locked) did **not** change the multi-client deficit and hurt
+single-client audio. Kept only as infrastructure (`hwFrames`). Do not pursue as
+the multi-client fix.
 
-Option A keeps the risky change out of coreaudiod's RT thread and is the more
-conventional fix; prefer it unless measurement shows the deficit is purely a
-reportable-rate issue (it did not appear to be — coreaudiod under-delivered even
-against a correct nominal timeline).
+### The deficit is timeline-independent (decisive)
+
+A hardware-clock counter (`hwFrames`) was added to the ring (engine publishes the
+true device-frame count every captured frame; advances at ~48096/s even when
+nothing records). `GetZeroTimeStamp` was then reworked to lock Core Audio's clock
+to it, two ways:
+
+- **Raw hardware timestamps** (report the true position at the true host time):
+  coreaudiod's rate estimate collapsed → it nearly stopped producing (`dOut`~0),
+  audible as constant noise. Too jittery.
+- **Smooth phase-locked timeline** (nominal-rate anchor with a gentle, clamped
+  pull toward `hwFrames`): single-client became stuttery, and — decisively —
+  **the multi-client deficit was unchanged: `dOut` ≈ 45500 with a second client
+  open, exactly as under the nominal timeline.**
+
+**Conclusion: the ~5% multi-client deficit does not depend on what clock/timeline
+the driver reports.** No `GetZeroTimeStamp` change moves it. The hardware-clock
+infrastructure (ring `hwFrames` + engine publisher) is kept in the tree for a
+future attempt, but the plug-in reverted to the nominal timeline (clean
+single-client). This means Option B (hardware-referenced timeline) is **disproven**
+as a fix for the multi-client case.
 
 ### Reliable reproduction (use this as the test harness)
 

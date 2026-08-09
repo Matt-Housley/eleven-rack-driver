@@ -297,6 +297,7 @@ static inline void emitSuperframe(void){
         f8[c] = (float)((double)gSF[c] / 2147483648.0);
     gSFCount++;
     if (gRing) {
+        er_store(&gRing->hwFrames, gSFCount);      // hardware clock (always advances while streaming)
         er_in_write(gRing, f8, 1);                 // publish all 8 channels
         // Live meter: leaky-RMS (spike-robust) rather than peak-hold, so an
         // isolated glitch can't latch a silent channel high. After the startup

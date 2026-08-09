@@ -36,8 +36,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-#define ER_RING_MAGIC    0x33314552u        /**< Header magic ('R','E','1','3') identifying the v3 layout. */
-#define ER_RING_VERSION  3u                 /**< Shared-layout version; bump on any struct change. */
+#define ER_RING_MAGIC    0x34314552u        /**< Header magic ('R','E','1','4') identifying the v4 layout. */
+#define ER_RING_VERSION  4u                 /**< Shared-layout version; bump on any struct change. */
 #define ER_RING_NAME     "/ElevenRackAudioRing" /**< POSIX shared-memory object name. */
 #define ER_IN_CH         8u                 /**< Capture channel count (device → Core Audio). */
 #define ER_OUT_CH        6u                 /**< Playback channel count (Core Audio → device). */
@@ -68,6 +68,14 @@ typedef struct {
     uint64_t inRead;              /**< Capture consumer (coreaudiod) read counter, in frames. */
     uint64_t outWrite;            /**< Playback producer (coreaudiod) write counter, in frames. */
     uint64_t outRead;             /**< Playback consumer (app) read counter, in frames. */
+
+    /** Hardware clock: total frames the device has clocked in, advanced by the
+     *  engine every captured frame while streaming — regardless of whether the
+     *  capture ring is being drained. Unlike ::inWrite (which freezes when the
+     *  capture ring saturates with no consumer), this always tracks the true
+     *  device rate, so the plugin can lock Core Audio's timeline to the real
+     *  hardware clock. Monotonic; 0 before streaming starts. */
+    uint64_t hwFrames;
 
     float in [ER_RING_FRAMES * ER_IN_CH];   /**< Capture ring: interleaved ::ER_IN_CH-wide float frames. */
     float out[ER_RING_FRAMES * ER_OUT_CH];  /**< Playback ring: interleaved ::ER_OUT_CH-wide float frames. */
