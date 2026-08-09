@@ -12,32 +12,39 @@ track skip. Present since 1.0.0; it is the issue the user originally reported. T
 menu-bar "Dropouts" indicator also lights, but that is partly a separate false
 alarm (see below).
 
-## Confirmed root cause
+## Confirmed root cause (refined — the trigger is a SECOND audio client)
 
-**coreaudiod delivers playback ~4% slower than the device consumes it.**
+**Single-client playback is clean. A second client opening the device degrades
+coreaudiod's delivery ~5%, and it latches until a full IO restart.**
 
-Measured with the device streaming and a track playing steadily:
+Measured live with `rawmon` (per-second `outWrite`/`outRead` deltas), clean 1.0.1
+baseline, post-reboot:
 
-| Quantity | Value |
-|---|---|
-| Capture production (`inWrite` delta) — the true hardware clock | ~48096 frames/s |
-| Playback delivery by coreaudiod (`outWrite` delta) | **~45000–46000 frames/s** |
-| Engine consumption (fixed accordion `gHwRate/8000`) | 48000 frames/s |
-| Steady playback underrun (`underrunFr`) | **~2000–3000 frames/s (~4–6%)** |
-| Playback ring backlog (`outWrite − outRead`) | ~0 (chronically empty) |
+| Phase | coreaudiod delivery (`dOut`) | Audio |
+|---|---|---|
+| Music only (single client), steady, incl. track skips | **~48000–48288 f/s**, backlog stable ~96 | **clean** |
+| The instant Safari opens/loads YouTube (2nd client attaches) | collapses to ~1300–23000 f/s for ~5 s | ~5 s of noise, then silence |
+| Settled with the 2nd client present | **~45500 f/s** (steady ~5% deficit), backlog ~0 | continuous dropouts |
+| After quitting Safari + Music pause/play | **still ~45000 f/s** (latched) | still broken |
 
-The USB engine consumes the playback ring at the device's hardware rate (~48 kHz,
-bus-paced). coreaudiod fills it from its own software timeline at ~46 kHz
-effective. The ~2000 frames/s shortfall is filled with silence every second →
-continuous glitching, and a burst of silence whenever coreaudiod stalls (track
-skips). The ring runs at ~0 backlog, so there is **zero slack**: any hiccup is
-instantly audible. Adding a single `os_log` per second to the plug-in's
-`DoIOOperation` collapsed delivery from ~46 k to ~8 k frames/s — the output IO
-path has essentially no timing headroom.
+So it is **not** a steady clock deficit (the earlier "~4%" reading came from
+perturbed test setups — a manually-run engine and diagnostic `os_log`/`printf`).
+With one client at the device rate coreaudiod delivers a clean 48000 f/s. The
+fault is triggered when a **second client** opens the device (Safari/YouTube, even
+before playing): coreaudiod's multi-client mix/scheduling for this virtual device
+drops ~5% of delivery, the ~0-backlog ring underruns continuously, and the state
+**does not reset** when the second client leaves — only a full device IO restart
+(switch output away and back, replug, or restart coreaudiod) clears it.
 
-This is a **clock-domain mismatch**: the plug-in's `GetZeroTimeStamp` timeline is
-a free-running `mach_absolute_time`-based nominal clock, completely decoupled from
-the engine's real consumption of the ring. Nothing reconciles the two clocks.
+Contributing factor: the output IO path has almost **zero timing headroom** — a
+single per-second `os_log` on the plug-in's `DoIOOperation` collapsed delivery to
+~8 k f/s. The plug-in's `GetZeroTimeStamp` is a free-running `mach_absolute_time`
+nominal clock, decoupled from the device's real clock; coreaudiod has no accurate,
+stable hardware reference, which is what makes its multi-client rate handling
+degrade here.
+
+**Original user report maps exactly:** "streaming from Music … switching to Safari
+while that is playing, it really drops out." That is this bug.
 
 ## What was ruled out (all disproven by measurement)
 
@@ -108,14 +115,27 @@ conventional fix; prefer it unless measurement shows the deficit is purely a
 reportable-rate issue (it did not appear to be — coreaudiod under-delivered even
 against a correct nominal timeline).
 
+### Reliable reproduction (use this as the test harness)
+
+1. Plug in the Eleven Rack, set it as the default output.
+2. Play a track in Music — confirm clean (`rawmon` `dOut ≈ 48000`).
+3. Open Safari and load a YouTube page (no need to play it).
+4. Observe: `dOut` collapses for ~5 s then settles at ~45500; audio drops out.
+5. Quit Safari — `dOut` stays ~45000 (latched). Switch output away/back or replug
+   to reset.
+
+A fix must keep `dOut ≈ 48000` (clean audio) **with a second client open**.
+
 ### Open question to resolve first
 
-Why is the deficit ~4% rather than the ~0.2% implied by the measured hardware
-clock (48096 vs 48000)? ~4% is too large for crystal drift. Before implementing,
-instrument the plug-in's `DoIOOperation` **without** `os_log` on the RT thread
-(write counters to an mmap'd file or add ring header fields) and confirm whether
-coreaudiod is (a) producing short buffers, (b) dropping whole IO cycles, or (c)
-being throttled. The answer decides whether Option A alone suffices.
+Why does a second client drop delivery ~5% and latch it? Likely coreaudiod's
+multi-client mixer/ASRC scheduling for this device, made brittle by the
+free-running (non-hardware-referenced) timeline and zero timing headroom. Before
+implementing, instrument the plug-in's `DoIOOperation` **without** `os_log` on the
+RT thread (mmap'd counters or ring header fields — increment only, no logging) and
+compare single- vs multi-client: is coreaudiod producing short buffers, dropping
+whole IO cycles, or resampling at a wrong ratio? That decides Option A vs B. Also
+worth checking `HALS`/coreaudiod overload logs while the second client attaches.
 
 ## Measurement harness (rebuild as needed)
 
