@@ -36,13 +36,16 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-#define ER_RING_MAGIC    0x35314552u        /**< Header magic ('R','E','1','5') identifying the v5 layout. */
-#define ER_RING_VERSION  5u                 /**< Shared-layout version; bump on any struct change. */
+#define ER_RING_MAGIC    0x36314552u        /**< Header magic ('R','E','1','6') identifying the v6 layout. */
+#define ER_RING_VERSION  6u                 /**< Shared-layout version; bump on any struct change. */
 #define ER_RING_NAME     "/ElevenRackAudioRing" /**< POSIX shared-memory object name. */
 #define ER_IN_CH         8u                 /**< Capture channel count (device → Core Audio). */
 #define ER_OUT_CH        6u                 /**< Playback channel count (Core Audio → device). */
 #define ER_RING_FRAMES   32768u             /**< Ring capacity in frames (power of two; ~0.68 s at 48 kHz). */
 #define ER_RING_MASK     (ER_RING_FRAMES - 1u) /**< Mask for wrapping a frame counter to a ring index. */
+/** Zero-timestamp period (frames): the timeline advances by this each ring wrap.
+ *  A quarter of the buffer, mirroring BlackHole's ring:period = 4:1 headroom. */
+#define ER_ZTS_PERIOD    8192u
 
 /**
  * @brief Shared-memory layout mapped by both the engine and the plugin.
@@ -66,8 +69,23 @@ typedef struct {
 
     uint64_t inWrite;             /**< Capture producer (app) write counter, in frames. */
     uint64_t inRead;              /**< Capture consumer (coreaudiod) read counter, in frames. */
-    uint64_t outWrite;            /**< Playback producer (coreaudiod) write counter, in frames. */
-    uint64_t outRead;             /**< Playback consumer (app) read counter, in frames. */
+    uint64_t outWrite;            /**< (Legacy FIFO — unused in the time-addressed model.) */
+    uint64_t outRead;             /**< (Legacy FIFO — unused in the time-addressed model.) */
+
+    /**
+     * @name Time-addressed playback (multi-client mix, BlackHole model)
+     * coreaudiod calls WriteMix per client at each client's absolute output sample
+     * time, so `out[]` is a ring indexed by sample time (position =
+     * `sampleTime % ER_RING_FRAMES`); the plugin overwrites at the position and
+     * publishes ::outWriteMax = the furthest sample time written. The engine reads
+     * at ::outPlayHead, trailing ::outWriteMax, and emits silence for any position
+     * past the write head. (Capture keeps the FIFO ::inWrite/::inRead — single
+     * consumer, not the multi-client-output bug.)
+     * @{
+     */
+    uint64_t outWriteMax;   /**< Furthest playback sample time written (plugin → engine). */
+    uint64_t outPlayHead;   /**< Engine playback read position, in sample time (diagnostic). */
+    /** @} */
 
     /** Hardware clock: total frames the device has clocked in, advanced by the
      *  engine every captured frame while streaming — regardless of whether the
@@ -308,6 +326,46 @@ static inline uint32_t er_out_write(ERRing *r, const float *src, uint32_t frames
     er__wr(r->out, ER_OUT_CH, w, src, frames);
     er_store(&r->outWrite, w + frames);
     return frames;
+}
+
+/**
+ * @brief Time-addressed playback producer: write @p frames at absolute sample time
+ *        @p base (position @c base%::ER_RING_FRAMES), overwriting, with wrap-split.
+ *
+ * Used by the plugin for each per-client WriteMix. Overwrites (not additive),
+ * matching BlackHole — coreaudiod hands us the frames for this sample-time range,
+ * and later cycles for the same range simply re-write them. Advances
+ * ::ERRing::outWriteMax to the furthest sample time written.
+ */
+static inline void er_out_write_at(ERRing *r, uint64_t base, const float *src, uint32_t frames) {
+    uint32_t start = (uint32_t)(base & ER_RING_MASK);
+    uint32_t first = ER_RING_FRAMES - start; if (first > frames) first = frames;
+    memcpy(r->out + (size_t)start * ER_OUT_CH, src, (size_t)first * ER_OUT_CH * sizeof(float));
+    if (frames > first)
+        memcpy(r->out, src + (size_t)first * ER_OUT_CH, (size_t)(frames - first) * ER_OUT_CH * sizeof(float));
+    uint64_t end = base + frames;
+    if (end > er_load(&r->outWriteMax)) er_store(&r->outWriteMax, end);
+}
+
+/**
+ * @brief Time-addressed playback consumer: read @p frames from sample time
+ *        @p playHead into @p dst; positions at/after @p writeMax emit silence.
+ *
+ * Used by the engine. Silence past the write head means a paused/stopped source
+ * (coreaudiod stopped advancing ::ERRing::outWriteMax) plays as silence rather
+ * than looping stale ring contents.
+ */
+static inline void er_out_read_at(const ERRing *r, uint64_t playHead, uint64_t writeMax,
+                                  float *dst, uint32_t frames) {
+    for (uint32_t f = 0; f < frames; f++) {
+        float *d = dst + (size_t)f * ER_OUT_CH;
+        if (playHead + f < writeMax) {
+            const float *s = r->out + (size_t)((playHead + f) & ER_RING_MASK) * ER_OUT_CH;
+            for (uint32_t c = 0; c < ER_OUT_CH; c++) d[c] = s[c];
+        } else {
+            for (uint32_t c = 0; c < ER_OUT_CH; c++) d[c] = 0.0f;
+        }
+    }
 }
 
 /**

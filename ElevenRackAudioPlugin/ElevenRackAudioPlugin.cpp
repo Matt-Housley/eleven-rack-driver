@@ -85,10 +85,15 @@ static UInt32   sIORunningCount         = 0;                /**< Number of clien
 static bool     sIORunning              = false;            /**< True while IO is active. */
 
 /** @name Timing anchor (updated each GetZeroTimeStamp period; lock-free) @{ */
-static volatile UInt64  sAnchorSampleTime   = 0;   /**< Anchor sample time. */
-static volatile UInt64  sAnchorHostTime     = 0;   /**< Anchor host time (mach ticks). */
+static volatile UInt64  sAnchorSampleTime   = 0;   /**< Anchor sample time (legacy; kept for config-change). */
+static volatile UInt64  sAnchorHostTime     = 0;   /**< Anchor host time (mach ticks) set at StartIO. */
 static volatile UInt64  sAnchorSeed         = 1;   /**< Timeline seed; bumped on discontinuities. */
-static volatile Float64 sHostTicksPerFrame  = 0.0; /**< Host ticks per audio frame. */
+static volatile Float64 sHostTicksPerFrame  = 0.0; /**< Host ticks per audio frame (nominal). */
+// Zero-timestamp state (BlackHole model): the timeline advances by ER_ZTS_PERIOD
+// frames each time a full ring-period of host ticks elapses from the anchor.
+static UInt64           sNumTimeStamps      = 0;   /**< Count of elapsed zero-timestamp periods. */
+static double           sPrevTicks          = 0.0; /**< Host ticks accumulated at the last period. */
+static pthread_mutex_t  sIOTimeMutex        = PTHREAD_MUTEX_INITIALIZER; /**< Guards the zero-timestamp state. */
 /** @} */
 
 /** @brief Shared transport to the USB engine (attached lazily; NULL when unavailable). */
@@ -396,11 +401,15 @@ static OSStatus ERP_PerformDeviceConfigurationChange(AudioServerPlugInDriverRef,
         memcpy(&newRate, &changeAction, sizeof(newRate));
         sSampleRate = newRate;
         RecomputeHostTicksPerFrame();
-        // Reset the timing anchor and bump the seed so CoreAudio treats the new
-        // rate as a fresh timeline (avoids a kink → glitches while it re-locks).
+        // Reset the zero-timestamp state and bump the seed so CoreAudio treats the
+        // new rate as a fresh timeline (avoids a kink → glitches while it re-locks).
+        pthread_mutex_lock(&sIOTimeMutex);
+        sNumTimeStamps    = 0;
         sAnchorSampleTime = 0;
         sAnchorHostTime   = mach_absolute_time();
+        sPrevTicks        = 0.0;
         sAnchorSeed++;
+        pthread_mutex_unlock(&sIOTimeMutex);
         if (!sRing) TryAttachRing();      // publish rate even if IO isn't running yet
         if (sRing) er_store32(&sRing->sampleRate, (uint32_t)newRate);
     }
@@ -843,7 +852,10 @@ static OSStatus ERP_Device_GetPropertyData(AudioServerPlugInDriverRef,
         break;
     }
     case kAudioDevicePropertyZeroTimeStampPeriod:
-        *static_cast<UInt32*>(outData) = sIOBufferFrameSize;
+        // The timeline's ring-buffer period — must match GetZeroTimeStamp's stride
+        // and the sample-time addressing in DoIOOperation (NOT the IO buffer size,
+        // which is what wedged coreaudiod when it disagreed with the addressing).
+        *static_cast<UInt32*>(outData) = ER_ZTS_PERIOD;
         *ioDataSize = sizeof(UInt32);
         break;
     case kAudioDevicePropertyBufferFrameSize:
@@ -1211,11 +1223,15 @@ static OSStatus ERP_StartIO(AudioServerPlugInDriverRef,
     pthread_mutex_lock(&sMutex);
     if (sIORunningCount == 0) {
         sIORunning = true;
-        // Reset the timing anchor
-        sAnchorSampleTime  = 0;
-        sAnchorHostTime    = mach_absolute_time();
-        sAnchorSeed        = 1;
+        // Reset the zero-timestamp state (BlackHole StartIO init).
         RecomputeHostTicksPerFrame();
+        pthread_mutex_lock(&sIOTimeMutex);
+        sNumTimeStamps    = 0;
+        sAnchorSampleTime = 0;
+        sAnchorHostTime   = mach_absolute_time();
+        sPrevTicks        = 0.0;
+        sAnchorSeed       = 1;
+        pthread_mutex_unlock(&sIOTimeMutex);
         pthread_mutex_unlock(&sMutex);
         RingStartStreaming();
         pthread_mutex_lock(&sMutex);
@@ -1266,17 +1282,24 @@ static OSStatus ERP_GetZeroTimeStamp(AudioServerPlugInDriverRef,
 {
     if (inDeviceObjectID != kObjectID_Device) return kAudioHardwareBadObjectError;
 
-    // Return the current anchor, then advance it by one buffer period.
-    // CoreAudio calls this every kAudioDevicePropertyZeroTimeStampPeriod frames.
-    UInt64 sampleTime = sAnchorSampleTime;
-    UInt64 hostTime   = sAnchorHostTime;
-
-    sAnchorSampleTime += sIOBufferFrameSize;
-    sAnchorHostTime   += (UInt64)(sIOBufferFrameSize * sHostTicksPerFrame);
-
-    *outSampleTime = (Float64)sampleTime;
-    *outHostTime   = hostTime;
+    // The device timeline is a series of (sampleTime, hostTime) anchors spaced
+    // ER_ZTS_PERIOD sample frames apart (the canonical ring-buffer model). Sample
+    // time advances by ER_ZTS_PERIOD each time a full ring-period of host ticks has
+    // elapsed from the StartIO anchor; host time advances by the matching ticks.
+    // (Faithful to BlackHole_GetZeroTimeStamp.)
+    pthread_mutex_lock(&sIOTimeMutex);
+    UInt64 now = mach_absolute_time();
+    double ticksPerPeriod = sHostTicksPerFrame * (double)ER_ZTS_PERIOD;
+    double nextTickOffset  = sPrevTicks + ticksPerPeriod;
+    UInt64 nextHostTime    = sAnchorHostTime + (UInt64)nextTickOffset;
+    if (nextHostTime <= now) {
+        ++sNumTimeStamps;
+        sPrevTicks = nextTickOffset;
+    }
+    *outSampleTime = (Float64)(sNumTimeStamps * (UInt64)ER_ZTS_PERIOD);
+    *outHostTime   = sAnchorHostTime + (UInt64)sPrevTicks;
     *outSeed       = sAnchorSeed;
+    pthread_mutex_unlock(&sIOTimeMutex);
     return kAudioHardwareNoError;
 }
 
@@ -1348,25 +1371,13 @@ static OSStatus ERP_DoIOOperation(AudioServerPlugInDriverRef,
         if (sRing && numCh == ER_IN_CH)
             er_in_read(sRing, static_cast<float*>(ioMainBuffer), inIOBufferFrameSize);
     } else if (inStreamObjectID == kObjectID_Stream_Output) {
-        // --- diagnostics: how does the host sequence WriteMix sample-time ranges?
-        //     Sequential call-to-call ≈ our FIFO append is fine; backward/gapped or
-        //     frequent client changes ⇒ multi-client interleave a FIFO mis-handles.
-        if (sRing && inIOCycleInfo) {
-            static double sPrevWmEnd = -1.0;
-            double s = inIOCycleInfo->mOutputTime.mSampleTime;
-            if (sPrevWmEnd >= 0.0) {
-                if (s == sPrevWmEnd)      sRing->dbgWmSeq++;
-                else if (s < sPrevWmEnd)  sRing->dbgWmBack++;
-                else                      sRing->dbgWmGap++;
-            }
-            sPrevWmEnd = s + (double)inIOBufferFrameSize;
-            sRing->dbgWmCount++;
-            if (inClientID != sRing->dbgWmLastClient) { sRing->dbgWmClientChanges++; sRing->dbgWmLastClient = inClientID; }
-        }
-        // Playback: push CoreAudio's frames into the output ring for the app's USB
-        // engine to send to the device. Drops on overrun (tracked as an xrun).
-        if (sRing && numCh == ER_OUT_CH)
-            er_out_write(sRing, static_cast<const float*>(ioMainBuffer), inIOBufferFrameSize);
+        // Playback: overwrite CoreAudio's frames into the time-addressed output ring
+        // at this cycle's absolute output sample time. Per-client WriteMix calls
+        // thus land at their correct positions instead of being appended in call
+        // order (which scrambled interleaved clients — the multi-client bug).
+        if (sRing && numCh == ER_OUT_CH && inIOCycleInfo)
+            er_out_write_at(sRing, (uint64_t)inIOCycleInfo->mOutputTime.mSampleTime,
+                            static_cast<const float*>(ioMainBuffer), inIOBufferFrameSize);
     }
     return kAudioHardwareNoError;
 }

@@ -101,6 +101,20 @@ static uint32_t gHwRate=48000;                /**< Current hardware sample rate 
 static double   gOutAccum=0.0;                /**< Output accordion accumulator (fractional frames). */
 
 /**
+ * @name Time-addressed playback read head
+ * The plugin overwrites each client's WriteMix into the ring at absolute sample
+ * time. The engine reads at ::gPlayHead, kept trailing the furthest written sample
+ * time (::ERRing::outWriteMax) by ~::OUT_TARGET_LAT frames of buffer; it re-anchors
+ * if that lag under/overruns (start, stall, drift). @{
+ */
+static uint64_t gPlayHead=0;                  /**< Engine playback read position (sample time). */
+static int      gPlayInit=0;                  /**< Play head anchored to the write head yet. */
+#define OUT_TARGET_LAT 1024u                  /**< Target lag behind the write head (frames, ~21 ms). */
+#define OUT_MIN_LAT     256u                  /**< Re-anchor if the lag falls below this. */
+#define OUT_MAX_LAT     8192u                 /**< Re-anchor if the lag exceeds this. */
+/** @} */
+
+/**
  * @name Rate-change state machine
  * A sample-rate change must not happen mid-stream. On a change the engine stops
  * re-arming isoc requests, lets in-flight transfers drain, then restarts the
@@ -429,12 +443,24 @@ static void armIn(Req*r){ for(int f=0;f<FPR;f++){r->fr[f].frReqCount=gInReqLen;r
  */
 static void armOut(Req*r){
     size_t off=0;
+    // Keep the play head trailing coreaudiod's furthest written sample time by
+    // ~OUT_TARGET_LAT; re-anchor if it under/overruns (start, stall, drift).
+    uint64_t wmax=0;
+    if(gRing){
+        wmax = er_load(&gRing->outWriteMax);
+        if(!gPlayInit || gPlayHead + OUT_MIN_LAT > wmax || gPlayHead + OUT_MAX_LAT < wmax){
+            gPlayHead = (wmax > OUT_TARGET_LAT) ? (wmax - OUT_TARGET_LAT) : 0;
+            gPlayInit = 1;
+        }
+        er_store(&gRing->outPlayHead, gPlayHead);
+    }
     for(int f=0;f<FPR;f++){
         gOutAccum += gHwRate/8000.0;
         int nf=(int)gOutAccum; gOutAccum-=nf;                 // frames this microframe
         if(nf>12)nf=12;
         float buf[12*ER_OUT_CH];
-        uint32_t got = gRing? er_out_read(gRing,buf,nf) : 0;
+        uint32_t got = 0;
+        if(gRing){ er_out_read_at(gRing, gPlayHead, wmax, buf, (uint32_t)nf); gPlayHead += (uint32_t)nf; got=(uint32_t)nf; }
         if (gRing && !gMeterSettle) {                   // live output meters (leaky-RMS)
             for (int c=0;c<(int)ER_OUT_CH;c++){
                 for (int fr=0; fr<(int)got; fr++){ float a=buf[fr*(int)ER_OUT_CH+c];
@@ -531,7 +557,7 @@ static void startMonitor(double rate){
  */
 static void reconfigure(void){
     (*gIn)->SetAlternateInterface(gIn,0); (*gOut)->SetAlternateInterface(gOut,0);
-    setSampleRate(gDev,gPendingRate); gHwRate=gPendingRate; gOutAccum=0;
+    setSampleRate(gDev,gPendingRate); gHwRate=gPendingRate; gOutAccum=0; gPlayInit=0;
     (*gIn)->SetAlternateInterface(gIn,ER_ALT); (*gOut)->SetAlternateInterface(gOut,ER_ALT);
     UInt16 im=0; gInPipe=findPipe(gIn,true,&im); gOutPipe=findPipe(gOut,false,NULL);
     gWordPhase=0; gCarryN=0;                        // reset capture de-interleave phase
