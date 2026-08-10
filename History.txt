@@ -5,19 +5,25 @@ The version number here matches the installer in dist/ (ElevenRackDriver-<versio
 and the app's CFBundleShortVersionString. Newest release first.
 
 
-1.0.2  —  UNRELEASED (in progress) — general-purpose playback dropout fix
-------------------------------------------------------------------------
-This release is held until the playback dropouts are actually fixed — it will
-ship as a single quality build, not piecemeal.
+1.0.2  —  2026-08-10  —  General-purpose playback dropout fix
+------------------------------------------------------------
+Audio (the headline fix)
+  - Fixed the dropouts when using the Eleven Rack as an everyday output — the
+    clicks/pops/silences heard when a second app started playing (e.g. streaming
+    from Music, then a video in a browser). Root cause: the driver used a FIFO for
+    the playback transport, but Core Audio drives a device's IO as a ring buffer
+    addressed by sample time, issuing per-client WriteMix calls at each client's
+    own position. With one app the two happen to coincide; with two or more, the
+    FIFO scrambled the interleaved writes and under-delivered ~5%. Playback is now
+    a proper sample-time-addressed ring (modelled on Apple's NullAudio / the
+    open-source BlackHole driver): the plugin writes each client at its sample-time
+    position and the USB engine reads at a play head that trails the write head.
+    Verified clean with three apps playing simultaneously. Root-cause write-up in
+    docs/PLAYBACK_DROPOUT_ANALYSIS.md.
 
-Audio (the headline fix — NOT yet done)
-  - Fix the general-purpose-playback dropouts: coreaudiod under-delivers playback
-    ~4% versus the device's consumption (a clock-domain mismatch), starving the
-    ring. Requires proper clock synchronisation (async sample-rate conversion in
-    the engine, or a hardware-referenced timeline). Root cause + design in
-    docs/PLAYBACK_DROPOUT_ANALYSIS.md. Earlier quick attempts (a clock-drift servo,
-    a larger safety offset, a prebuffer, larger IO buffers) were all disproven and
-    backed out.
+Menu-bar app (folded into this release)
+  - Fixed the status icon showing bright/"Active" when no Eleven Rack was
+    connected. A leftover shared ring from a previous session could keep valid
 
 Menu-bar app (ready, folded into this release)
   - Fixed the status icon showing bright/"Active" when no Eleven Rack was

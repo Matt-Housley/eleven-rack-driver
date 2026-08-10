@@ -775,7 +775,11 @@ static OSStatus ERP_Device_GetPropertyData(AudioServerPlugInDriverRef,
         *ioDataSize = sizeof(UInt32);
         break;
     case kAudioDevicePropertySafetyOffset:
-        *static_cast<UInt32*>(outData) = 0;
+        // How far ahead of the play head coreaudiod writes. In the time-addressed
+        // model this is the buffer the engine's play head trails within, so a
+        // non-zero value (well under ER_ZTS_PERIOD) gives the engine comfortable
+        // margin against scheduling jitter. ~21 ms at 48 kHz.
+        *static_cast<UInt32*>(outData) = 1024;
         *ioDataSize = sizeof(UInt32);
         break;
     case kAudioDevicePropertyStreams: {

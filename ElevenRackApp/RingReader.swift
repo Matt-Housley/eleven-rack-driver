@@ -41,7 +41,7 @@ final class RingReader {
         if let r = ring {
             lastInWrite = r.pointee.inWrite
             lastInRead = r.pointee.inRead
-            lastOutWrite = r.pointee.outWrite
+            lastOutWrite = r.pointee.outWriteMax   // time-addressed playback write head
             lastXrun = r.pointee.xrunCount
         }
         return ring != nil
@@ -61,7 +61,7 @@ final class RingReader {
         if r.pointee.magic != ER_RING_MAGIC { detach(); return nil }
         let w = r.pointee.inWrite
         let rd = r.pointee.inRead
-        let ow = r.pointee.outWrite
+        let ow = r.pointee.outWriteMax   // playback advances the time-addressed write head
         let x = r.pointee.xrunCount
         let dW = w &- lastInWrite
         let dRd = rd &- lastInRead
