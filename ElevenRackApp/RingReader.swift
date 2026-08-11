@@ -14,8 +14,11 @@ struct RingActivity {
     /// ring is saturating (xruns rising because nothing is consuming yet). Either
     /// way the device is connected and streaming.
     let enginePulling: Bool
-    /// An app is actively using the device — reading input (inRead advancing) or
-    /// playing output (outWrite advancing). Only then are xruns meaningful.
+    /// An app is actively *recording* — the capture consumer (inRead) is advancing.
+    /// xrunCount counts capture-ring overruns, which are expected (and harmless)
+    /// when nothing records the 8-channel input, so they only signal a real dropout
+    /// while recording. Playback activity must NOT gate this, or plain playback
+    /// would false-alarm as the idle capture ring saturates.
     let consumerActive: Bool
     /// Overruns since the previous poll.
     let xrunDelta: UInt32
@@ -75,7 +78,7 @@ final class RingReader {
         let running = r.pointee.engineRunning != 0
         return RingActivity(
             enginePulling: running && (dW > 0 || dX > 0),
-            consumerActive: dRd > 0 || dOW > 0,
+            consumerActive: dRd > 0,   // recording only — see RingActivity doc
             xrunDelta: dX,
             sampleRate: r.pointee.sampleRate,
             engineRunning: running)

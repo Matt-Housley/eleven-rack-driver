@@ -108,9 +108,10 @@ static double   gOutAccum=0.0;                /**< Output accordion accumulator 
  * if that lag under/overruns (start, stall, drift). @{
  */
 static uint64_t gPlayHead=0;                  /**< Engine playback read position (sample time). */
+static uint64_t gLastWmax=0;                  /**< outWriteMax at the previous cycle (active detection). */
 static int      gPlayInit=0;                  /**< Play head anchored to the write head yet. */
 #define OUT_TARGET_LAT 1024u                  /**< Target lag behind the write head (frames, ~21 ms). */
-#define OUT_MIN_LAT     256u                  /**< Re-anchor if the lag falls below this. */
+#define OUT_MIN_LAT     128u                  /**< Re-anchor (while active) if the lag falls below this. */
 #define OUT_MAX_LAT     8192u                 /**< Re-anchor if the lag exceeds this. */
 /** @} */
 
@@ -448,10 +449,23 @@ static void armOut(Req*r){
     uint64_t wmax=0;
     if(gRing){
         wmax = er_load(&gRing->outWriteMax);
-        if(!gPlayInit || gPlayHead + OUT_MIN_LAT > wmax || gPlayHead + OUT_MAX_LAT < wmax){
+        if(!gPlayInit){
             gPlayHead = (wmax > OUT_TARGET_LAT) ? (wmax - OUT_TARGET_LAT) : 0;
             gPlayInit = 1;
+        } else if(wmax != gLastWmax){
+            // Actively receiving playback: hold the play head ~OUT_TARGET_LAT behind
+            // the write head so every interleaved client has written the positions we
+            // read (multi-client mix) and drift is corrected. Re-anchors only when the
+            // lag leaves [MIN,MAX]; with matched rates it never fires (no glitch).
+            if(gPlayHead + OUT_MIN_LAT > wmax || gPlayHead + OUT_MAX_LAT < wmax)
+                gPlayHead = (wmax > OUT_TARGET_LAT) ? (wmax - OUT_TARGET_LAT) : 0;
+        } else if(gPlayHead > wmax){
+            // Paused/stopped (write head frozen): clamp so we read silence past the
+            // write head rather than re-anchoring backward (which would loop stale
+            // audio). No backward re-anchor while idle.
+            gPlayHead = wmax;
         }
+        gLastWmax = wmax;
         er_store(&gRing->outPlayHead, gPlayHead);
     }
     for(int f=0;f<FPR;f++){
@@ -655,6 +669,12 @@ int main(int argc,char**argv){
         int created=0; gRing=er_ring_create(&created);
         if(!gRing){printf("  WARNING: shared ring unavailable (audio won't reach CoreAudio)\n");}
         else { er_store32(&gRing->engineRunning,1); er_store32(&gRing->sampleRate,gHwRate);
+               // Reset the time-addressed playback heads: an attached (persisted) ring
+               // may hold a stale outWriteMax from a previous session whose sample-time
+               // origin differs from coreaudiod's fresh StartIO timeline (which starts
+               // at 0). Without this, coreaudiod's new small sample times never exceed
+               // the stale value, outWriteMax never advances, and playback is silent.
+               er_store(&gRing->outWriteMax,0); er_store(&gRing->outPlayHead,0); gPlayInit=0;
                printf("  ring: %s (rate %u Hz)\n",created?"created":"attached",gHwRate); }
         // MIDI needs nothing from us: the Eleven Rack's USB-MIDI interface is a
         // standard class device that macOS exposes directly ("Eleven Rack Rig" /

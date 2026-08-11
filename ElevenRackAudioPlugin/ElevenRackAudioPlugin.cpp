@@ -323,7 +323,14 @@ static void DetachRing()
 static void RingStartStreaming()
 {
     TryAttachRing();
-    if (sRing) er_store32(&sRing->streamingRequested, 1);
+    if (sRing) {
+        // Fresh StartIO timeline starts at sample time 0, so reset the playback
+        // heads — a persisted ring may hold a stale outWriteMax from a previous
+        // session that our new small sample times would never exceed (→ silence).
+        er_store(&sRing->outWriteMax, 0);
+        er_store(&sRing->outPlayHead, 0);
+        er_store32(&sRing->streamingRequested, 1);
+    }
 }
 
 /** @brief Clear the streaming-requested hint. */
@@ -775,11 +782,10 @@ static OSStatus ERP_Device_GetPropertyData(AudioServerPlugInDriverRef,
         *ioDataSize = sizeof(UInt32);
         break;
     case kAudioDevicePropertySafetyOffset:
-        // How far ahead of the play head coreaudiod writes. In the time-addressed
-        // model this is the buffer the engine's play head trails within, so a
-        // non-zero value (well under ER_ZTS_PERIOD) gives the engine comfortable
-        // margin against scheduling jitter. ~21 ms at 48 kHz.
-        *static_cast<UInt32*>(outData) = 1024;
+        // 0, matching BlackHole (and the clean multi-client build). The engine's
+        // play-head lag provides the playback buffer; a larger safety offset here
+        // shifted coreaudiod's write phase and regressed multi-client mixing.
+        *static_cast<UInt32*>(outData) = 0;
         *ioDataSize = sizeof(UInt32);
         break;
     case kAudioDevicePropertyStreams: {
