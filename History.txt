@@ -20,6 +20,9 @@ Audio (the headline fix)
     position and the USB engine reads at a play head that trails the write head.
     Verified clean with three apps playing simultaneously. Root-cause write-up in
     docs/PLAYBACK_DROPOUT_ANALYSIS.md.
+  - Clean playback transitions: the engine prebuffers at the start of playback
+    (including right after a recording), so playback begins without a click, and
+    pausing/stopping gives clean silence rather than looping the last buffer.
 
 Menu-bar app (folded into this release)
   - Fixed the status icon showing bright/"Active" when no Eleven Rack was
@@ -31,11 +34,6 @@ Menu-bar app (folded into this release)
     counted capture-ring overruns, which happen harmlessly whenever nothing is
     recording the 8-channel input; it now flags xruns only while an app is actually
     recording.
-
-Known issue
-  - The very first moment of playback immediately after stopping a recording can
-    click briefly while the device re-establishes its playback buffer, then plays
-    clean (the recording itself is unaffected). To be smoothed in a later release.
 
 
 1.0.1  —  2026-08-08  —  Maintenance / hardening
