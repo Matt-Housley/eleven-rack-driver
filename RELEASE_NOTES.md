@@ -15,10 +15,14 @@ Setup and any DAW as an **8-in / 6-out** device.
   playback path is now a proper sample-time-addressed ring, matching how Core
   Audio actually drives a device, so multiple apps mix together cleanly. Tested
   with three apps playing at once. Single-app playback and DAW use are unaffected.
-- **Menu-bar icon fix.** The icon could look bright/"Active" when no Eleven Rack
-  was connected (a leftover buffer from a previous session was misread as a live
-  device). A disconnected device now correctly shows the dimmed "device not
-  connected" icon.
+- **Menu-bar fixes.** The icon no longer shows bright/"Active" when no Eleven Rack
+  is connected (it now trusts the engine's running state), and the "Dropouts"
+  indicator no longer false-alarms during normal playback — it flags xruns only
+  while an app is actually recording.
+
+> **Known issue:** the first moment of playback right after you stop a recording
+> can click briefly while the device re-establishes its playback buffer, then
+> plays clean (the recording itself is fine). It'll be smoothed in a later update.
 
 ## Install
 

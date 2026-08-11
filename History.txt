@@ -24,13 +24,18 @@ Audio (the headline fix)
 Menu-bar app (folded into this release)
   - Fixed the status icon showing bright/"Active" when no Eleven Rack was
     connected. A leftover shared ring from a previous session could keep valid
-
-Menu-bar app (ready, folded into this release)
-  - Fixed the status icon showing bright/"Active" when no Eleven Rack was
-    connected. A leftover shared ring from a previous session could keep valid
     contents with a drifting xrun value, which was misread as a live device. The
     app now trusts the engine's "running" flag, so a disconnected device correctly
     shows the dimmed "device not connected" icon.
+  - Fixed the "Dropouts" indicator false-alarming during normal playback. It
+    counted capture-ring overruns, which happen harmlessly whenever nothing is
+    recording the 8-channel input; it now flags xruns only while an app is actually
+    recording.
+
+Known issue
+  - The very first moment of playback immediately after stopping a recording can
+    click briefly while the device re-establishes its playback buffer, then plays
+    clean (the recording itself is unaffected). To be smoothed in a later release.
 
 
 1.0.1  —  2026-08-08  —  Maintenance / hardening
