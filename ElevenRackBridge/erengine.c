@@ -109,7 +109,9 @@ static double   gOutAccum=0.0;                /**< Output accordion accumulator 
  */
 static uint64_t gPlayHead=0;                  /**< Engine playback read position (sample time). */
 static uint64_t gLastWmax=0;                  /**< outWriteMax at the previous cycle (active detection). */
+static uint64_t gPrimeStart=0;                /**< Sample time playback (re)started, while prebuffering. */
 static int      gPlayInit=0;                  /**< Play head anchored to the write head yet. */
+static int      gPriming=0;                   /**< Prebuffering: emit silence until the buffer fills. */
 #define OUT_TARGET_LAT 1024u                  /**< Target lag behind the write head (frames, ~21 ms). */
 #define OUT_MIN_LAT     128u                  /**< Re-anchor (while active) if the lag falls below this. */
 #define OUT_MAX_LAT     8192u                 /**< Re-anchor if the lag exceeds this. */
@@ -449,20 +451,27 @@ static void armOut(Req*r){
     uint64_t wmax=0;
     if(gRing){
         wmax = er_load(&gRing->outWriteMax);
-        if(!gPlayInit){
-            gPlayHead = (wmax > OUT_TARGET_LAT) ? (wmax - OUT_TARGET_LAT) : 0;
-            gPlayInit = 1;
-        } else if(wmax != gLastWmax){
-            // Actively receiving playback: hold the play head ~OUT_TARGET_LAT behind
-            // the write head so every interleaved client has written the positions we
-            // read (multi-client mix) and drift is corrected. Re-anchors only when the
-            // lag leaves [MIN,MAX]; with matched rates it never fires (no glitch).
-            if(gPlayHead + OUT_MIN_LAT > wmax || gPlayHead + OUT_MAX_LAT < wmax)
-                gPlayHead = (wmax > OUT_TARGET_LAT) ? (wmax - OUT_TARGET_LAT) : 0;
+        int active = (wmax != gLastWmax);      // coreaudiod wrote since the last cycle
+        // Enter (re)prebuffering on first use, or when the write head is far ahead of
+        // where we read (playback resumed after silence, or the engine fell behind),
+        // or — while actively playing — if the lag drifts out of [MIN,MAX].
+        if(!gPlayInit || gPlayHead + OUT_MAX_LAT < wmax ||
+           (active && !gPriming && gPlayHead + OUT_MIN_LAT > wmax)){
+            gPriming    = 1;
+            gPrimeStart = wmax;                // consume from here once the buffer fills
+            gPlayHead   = wmax;                // read silence meanwhile
+            gPlayInit   = 1;
+        }
+        if(gPriming){
+            if(active && wmax >= gPrimeStart + OUT_TARGET_LAT){
+                gPlayHead = gPrimeStart;       // buffer built: start consuming from the top
+                gPriming  = 0;
+            } else if(gPlayHead > wmax){
+                gPlayHead = wmax;              // still filling: hold at the frontier → silence
+            }
         } else if(gPlayHead > wmax){
             // Paused/stopped (write head frozen): clamp so we read silence past the
-            // write head rather than re-anchoring backward (which would loop stale
-            // audio). No backward re-anchor while idle.
+            // write head rather than looping stale audio.
             gPlayHead = wmax;
         }
         gLastWmax = wmax;
